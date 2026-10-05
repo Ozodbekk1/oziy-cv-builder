@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { FaLinkedin } from 'react-icons/fa6';
 import type { ResumeData } from '@/components/resume/templates/types';
+import { saveLocalResume } from '@/lib/localResumes';
 
 type Mode = 'choose' | 'import' | 'template';
 type ImportTab = 'pdf' | 'linkedin';
@@ -45,7 +46,7 @@ export default function CreateResumePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<Mode>('choose');
   const [tab, setTab] = useState<ImportTab>('pdf');
-  const [busy, setBusy] = useState<null | 'scratch' | 'import'>(null);
+  const [busy, setBusy] = useState<null | 'scratch' | 'import' | 'create'>(null);
   const [dragging, setDragging] = useState(false);
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [pendingData, setPendingData] = useState<ResumeData | null>(null);
@@ -54,8 +55,13 @@ export default function CreateResumePage() {
   const importing = busy === 'import';
 
   const createResume = async (data: ResumeData, title: string) => {
-    const userId = session?.user?.email || 'temp_resumes';
     const resumeId = `resume_${Date.now()}`;
+    if (!session?.user?.email) {
+      saveLocalResume(resumeId, data, title);
+      console.info('[resume-create] Created local resume:', resumeId);
+      return resumeId;
+    }
+    const userId = session.user.email;
     await setDoc(doc(db, `users/${userId}/resumes/${resumeId}`), {
       ...data,
       title,
@@ -74,6 +80,39 @@ export default function CreateResumePage() {
     setPendingData(EMPTY_RESUME);
     setPendingTitle('Untitled Resume');
     setMode('template');
+  };
+
+  const handleTemplateSelect = async (templateId: string, latex = false) => {
+    if (busy) return;
+
+    setBusy('create');
+    try {
+      const data = pendingData ?? EMPTY_RESUME;
+      const resumeData = latex
+        ? {
+            ...data,
+            template: templateId,
+            editorMode: 'latex' as const,
+            latexContent: data.personalDetails.fullName
+              ? generateLatex(data, templateId)
+              : generateLatex(MOCK_RESUME, templateId),
+          }
+        : { ...data, template: templateId };
+      const resumeId = await createResume(resumeData, pendingTitle || 'Untitled Resume');
+      toast({
+        title: 'Success',
+        description: latex ? 'LaTeX resume created.' : 'Resume created successfully.',
+      });
+      router.push(`/resume/${resumeId}`);
+    } catch (error) {
+      console.error('[resume-create] Failed to create resume:', error);
+      toast({
+        title: 'Error',
+        variant: 'destructive',
+        description: error instanceof Error ? error.message : 'Failed to create resume.',
+      });
+      setBusy(null);
+    }
   };
 
   const handleImportFile = async (file: File) => {
@@ -372,25 +411,7 @@ export default function CreateResumePage() {
                 ].map((t) => (
                   <Card
                     key={t.id}
-                    onClick={async () => {
-                      if (busy || !pendingData) return;
-                      setBusy('import'); // reuse import state for loading UI
-                      try {
-                        const resumeId = await createResume(
-                          { ...pendingData, template: t.id },
-                          pendingTitle
-                        );
-                        toast({ title: 'Success', description: 'Resume created successfully.' });
-                        router.push(`/resume/${resumeId}`);
-                      } catch (error) {
-                        toast({
-                          title: 'Error',
-                          variant: 'destructive',
-                          description: 'Failed to create resume.',
-                        });
-                        setBusy(null);
-                      }
-                    }}
+                    onClick={() => handleTemplateSelect(t.id)}
                     className={`group relative cursor-pointer overflow-hidden border-2 transition-all hover:-translate-y-1 hover:border-primary hover:shadow-xl ${
                       busy ? 'pointer-events-none opacity-50' : ''
                     }`}
@@ -432,35 +453,7 @@ export default function CreateResumePage() {
                 {LATEX_TEMPLATES.map((t) => (
                   <Card
                     key={t.id}
-                    onClick={async () => {
-                      if (busy || !pendingData) return;
-                      setBusy('import');
-                      try {
-                        // Imported data populates the template; a scratch resume
-                        // gets example content to edit (Overleaf-style).
-                        const source = pendingData.personalDetails.fullName
-                          ? generateLatex(pendingData, t.id)
-                          : generateLatex(MOCK_RESUME, t.id);
-                        const resumeId = await createResume(
-                          {
-                            ...pendingData,
-                            template: t.id,
-                            editorMode: 'latex',
-                            latexContent: source,
-                          },
-                          pendingTitle
-                        );
-                        toast({ title: 'Success', description: 'LaTeX resume created.' });
-                        router.push(`/resume/${resumeId}`);
-                      } catch (error) {
-                        toast({
-                          title: 'Error',
-                          variant: 'destructive',
-                          description: 'Failed to create resume.',
-                        });
-                        setBusy(null);
-                      }
-                    }}
+                    onClick={() => handleTemplateSelect(t.id, true)}
                     className={`group relative cursor-pointer overflow-hidden border-2 transition-all hover:-translate-y-1 hover:border-emerald-500 hover:shadow-xl ${
                       busy ? 'pointer-events-none opacity-50' : ''
                     }`}

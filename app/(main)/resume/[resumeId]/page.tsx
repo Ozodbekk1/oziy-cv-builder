@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/authOptions';
 import ResumeView from './resumeView';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import LocalResumeView from './localResumeView';
 
 // Types remain the same as in your original code
 interface PersonalDetails {
@@ -86,9 +87,12 @@ interface ResumeData {
 
 async function getResumeData(resumeId: string): Promise<ResumeData | null> {
   const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    console.info('[resume-open] No authenticated user; using local resume storage.');
+    return null;
+  }
   try {
-    const userId = session?.user?.email || "temp_resumes";
-    const resumeRef = doc(db, `users/${userId}/resumes/${resumeId}`);
+    const resumeRef = doc(db, `users/${session.user.email}/resumes/${resumeId}`);
     const resumeSnap = await getDoc(resumeRef);
     
     if (!resumeSnap.exists()) {
@@ -109,15 +113,10 @@ export default async function Page({
 }) {
   const { resumeId } = await params;
   const resumeData = await getResumeData(resumeId);
-  const session = await getServerSession(authOptions);
 
   if (!resumeData) {
     return (
-      <div className="p-8 text-center dark:bg-gray-800 min-h-[80vh]">
-        <p className="text-gray-600 dark:text-gray-400">No resume data found</p>
-        <p className="text-sm text-gray-500">ID: {resumeId}</p>
-        <p className="text-sm text-gray-500">User: {session?.user?.email}</p>
-      </div>
+      <LocalResumeView resumeId={resumeId} />
     );
   }
 

@@ -17,8 +17,11 @@ import { MinimalTemplate } from '@/components/resume/templates/Minimal'
 import { ProfessionalTemplate } from '@/components/resume/templates/Professional'
 import { CompactTemplate } from '@/components/resume/templates/Compact'
 import { SidebarTemplate } from '@/components/resume/templates/Sidebar'
+import { ClassicTemplate } from '@/components/resume/templates/Classic'
+import { EngineeringTemplate } from '@/components/resume/templates/Engineering'
 import type { ResumeData } from '@/components/resume/templates/types'
 import { isLatexTemplate } from '@/lib/latexTemplates'
+import { deleteLocalResume, getLocalResumes, updateLocalResume } from '@/lib/localResumes'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +40,8 @@ const TEMPLATES = {
   professional: ProfessionalTemplate,
   compact: CompactTemplate,
   sidebar: SidebarTemplate,
+  classic: ClassicTemplate,
+  engineering: EngineeringTemplate,
 } as const
 
 interface Resume {
@@ -180,7 +185,11 @@ export default function Page() {
 
   const deleteResume = async (resumeId: string) => {
     try {
-      await deleteDoc(doc(db, `users/${session?.user?.email}/resumes/${resumeId}`));
+      if (session?.user?.email) {
+        await deleteDoc(doc(db, `users/${session.user.email}/resumes/${resumeId}`));
+      } else {
+        deleteLocalResume(resumeId);
+      }
       toast({
         title: "Success",
         description: "Resume deleted successfully!",
@@ -208,7 +217,11 @@ export default function Page() {
     setEditingId(null);
     if (!title) return;
     try {
-      await updateDoc(doc(db, `users/${session?.user?.email}/resumes/${resumeId}`), { title });
+      if (session?.user?.email) {
+        await updateDoc(doc(db, `users/${session.user.email}/resumes/${resumeId}`), { title });
+      } else {
+        updateLocalResume(resumeId, { title });
+      }
       setResumes((prev) =>
         prev.map((r) => (r.id === resumeId ? { ...r, title } : r))
       );
@@ -225,25 +238,30 @@ export default function Page() {
 
   useEffect(() => {
     const fetchResumes = async () => {
-      if (!session?.user?.email) return;
-
       try {
-        const resumesRef = collection(db, `users/${session.user.email}/resumes`);
-        const resumesSnapshot = await getDocs(resumesRef);
-
-        const resumeData = resumesSnapshot.docs.map(docSnap => {
-          const data = docSnap.data();
-          return {
-            id: docSnap.id,
-            title: data.title,
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
-            template: data.template,
-            data: data as Resume['data'],
-          } as Resume;
-        });
+        const resumeData = session?.user?.email
+          ? (await getDocs(collection(db, `users/${session.user.email}/resumes`))).docs.map((docSnap) => {
+              const data = docSnap.data();
+              return {
+                id: docSnap.id,
+                title: data.title,
+                createdAt: data.createdAt,
+                updatedAt: data.updatedAt,
+                template: data.template,
+                data: data as Resume['data'],
+              } as Resume;
+            })
+          : getLocalResumes().map((resume) => ({
+              id: resume.id,
+              title: resume.title,
+              createdAt: resume.createdAt,
+              updatedAt: resume.updatedAt,
+              template: resume.template,
+              data: resume.data,
+            }));
 
         setResumes(resumeData);
+        console.info('[profile] Loaded resumes:', resumeData.length, session?.user?.email ? 'firebase' : 'local');
       } catch (error) {
         console.error('Error fetching resumes:', error);
       } finally {
@@ -258,11 +276,6 @@ export default function Page() {
     return <ProfileSkeleton />;
   }
 
-  if (!session) {
-    router.push('/signin');
-    return null;
-  }
-
   const defaultTitle = (resume: Resume) =>
     resume.data?.jobTitle ||
     resume.data?.personalDetails?.fullName ||
@@ -275,20 +288,20 @@ export default function Page() {
         <Card className="h-fit">
           <CardHeader className="text-center">
             <Avatar className="w-24 h-24 mx-auto mb-4">
-              <AvatarImage src={session.user?.image ?? ''} alt={session.user?.name ?? ''} />
+              <AvatarImage src={session?.user?.image ?? ''} alt={session?.user?.name ?? ''} />
               <AvatarFallback>
-                {session.user?.name?.charAt(0) ?? 'U'}
+                {session?.user?.name?.charAt(0) ?? 'U'}
               </AvatarFallback>
             </Avatar>
-            <CardTitle>{displayName || session.user?.name}</CardTitle>
+            <CardTitle>{displayName || session?.user?.name || 'Local resumes'}</CardTitle>
             <CardDescription>
               <span className="flex items-center justify-center gap-2">
                 <User className="w-4 h-4" />
-                <span>@{session.user?.name ?? 'username'}</span>
+                <span>@{session?.user?.name ?? 'browser storage'}</span>
               </span>
               <span className="flex items-center justify-center gap-2 mt-2">
                 <Mail className="w-4 h-4" />
-                <span>{session.user?.email}</span>
+                <span>{session?.user?.email ?? 'Saved on this device'}</span>
               </span>
             </CardDescription>
           </CardHeader>
@@ -333,12 +346,25 @@ export default function Page() {
                   .map((resume) => (
                     <Card
                       key={resume.id}
-                      className="group overflow-hidden hover:shadow-md transition-shadow"
+                      className="group cursor-pointer overflow-hidden transition-shadow hover:shadow-md focus-within:ring-2 focus-within:ring-primary/50"
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => router.push(`/resume/${resume.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          router.push(`/resume/${resume.id}`)
+                        }
+                      }}
+                      aria-label={`Open ${resume.title || defaultTitle(resume)}`}
                     >
                       <button
                         type="button"
                         className="block w-full h-48 border-b cursor-pointer text-left"
-                        onClick={() => router.push(`/resume/${resume.id}`)}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          router.push(`/resume/${resume.id}`)
+                        }}
                         aria-label={`Open ${resume.title || defaultTitle(resume)}`}
                       >
                         <ResumePreview resume={resume} />
@@ -360,7 +386,10 @@ export default function Page() {
                               variant="ghost"
                               size="sm"
                               className="px-2"
-                              onClick={() => saveRename(resume.id)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                saveRename(resume.id)
+                              }}
                               aria-label="Save name"
                             >
                               <Check className="h-4 w-4" />
@@ -369,7 +398,10 @@ export default function Page() {
                               variant="ghost"
                               size="sm"
                               className="px-2"
-                              onClick={() => setEditingId(null)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setEditingId(null)
+                              }}
                               aria-label="Cancel rename"
                             >
                               <X className="h-4 w-4" />
@@ -379,7 +411,10 @@ export default function Page() {
                           <div className="flex items-center justify-between gap-2">
                             <div
                               className="min-w-0 cursor-pointer"
-                              onClick={() => router.push(`/resume/${resume.id}`)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                router.push(`/resume/${resume.id}`)
+                              }}
                             >
                               <p className="font-medium text-sm truncate">
                                 {resume.title || defaultTitle(resume)}
@@ -395,7 +430,10 @@ export default function Page() {
                                 variant="ghost"
                                 size="sm"
                                 className="px-2"
-                                onClick={() => startRename(resume)}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  startRename(resume)
+                                }}
                                 aria-label="Rename resume"
                               >
                                 <Pencil className="h-4 w-4 text-muted-foreground" />
@@ -407,6 +445,7 @@ export default function Page() {
                                     size="sm"
                                     className="px-2 text-red-500 hover:text-red-600"
                                     aria-label="Delete resume"
+                                    onClick={(event) => event.stopPropagation()}
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>

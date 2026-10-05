@@ -90,6 +90,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { updateLocalResume } from '@/lib/localResumes';
 
 const TEMPLATES = {
   modern: ModernTemplate,
@@ -493,10 +494,7 @@ export default function ResumeView({
     saveTimer.current = setTimeout(async () => {
       setSaveStatus('saving');
       try {
-        const userEmail = session?.user?.email || 'temp_resumes';
-        await updateDoc(
-          doc(db, `users/${userEmail}/resumes/${resumeId}`),
-          flattenObject({
+        const resumePatch = {
             ...resumeData,
             template: editorMode === 'latex' ? activeLatexTemplate : selectedTemplate,
             accentColor,
@@ -511,8 +509,15 @@ export default function ResumeView({
             customMargins,
             pageBreaks,
             updatedAt: new Date().toISOString(),
-          })
-        );
+          };
+        if (session?.user?.email) {
+          await updateDoc(
+            doc(db, `users/${session.user.email}/resumes/${resumeId}`),
+            flattenObject(resumePatch)
+          );
+        } else {
+          updateLocalResume(resumeId, resumePatch);
+        }
         localStorage.setItem('resumeitnow_template', selectedTemplate);
         setSaveStatus('saved');
       } catch (error) {
