@@ -15,6 +15,8 @@ import { MinimalTemplate } from '@/components/resume/templates/Minimal';
 import { ProfessionalTemplate } from '@/components/resume/templates/Professional';
 import { CompactTemplate } from '@/components/resume/templates/Compact';
 import { SidebarTemplate } from '@/components/resume/templates/Sidebar';
+import { ClassicTemplate } from '@/components/resume/templates/Classic';
+import { EngineeringTemplate } from '@/components/resume/templates/Engineering';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -365,6 +367,8 @@ export default function CreateResumePage() {
                   { id: 'professional', label: 'Professional', blurb: 'Centered classic layout, timeless.' },
                   { id: 'compact', label: 'Compact', blurb: 'Dense serif — fits more on one page.' },
                   { id: 'sidebar', label: 'Sidebar', blurb: 'Two-column with a tinted accent rail.' },
+                  { id: 'classic', label: 'Classic', blurb: 'Traditional serif layout with clear section rules.' },
+                  { id: 'engineering', label: 'Engineering', blurb: 'Modern blue-accent layout for technical resumes.' },
                 ].map((t) => (
                   <Card
                     key={t.id}
@@ -636,6 +640,8 @@ const PREVIEW_TEMPLATES = {
   professional: ProfessionalTemplate,
   compact: CompactTemplate,
   sidebar: SidebarTemplate,
+  classic: ClassicTemplate,
+  engineering: EngineeringTemplate,
 } as const;
 
 function TemplatePreview({ id }: { id: string }) {

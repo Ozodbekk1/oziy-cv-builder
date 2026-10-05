@@ -40,6 +40,8 @@ import { MinimalTemplate } from '@/components/resume/templates/Minimal';
 import { ProfessionalTemplate } from '@/components/resume/templates/Professional';
 import { CompactTemplate } from '@/components/resume/templates/Compact';
 import { SidebarTemplate } from '@/components/resume/templates/Sidebar';
+import { ClassicTemplate } from '@/components/resume/templates/Classic';
+import { EngineeringTemplate } from '@/components/resume/templates/Engineering';
 import LatexEditor from '@/components/resume/editor/LatexEditor';
 import { LATEX_TEMPLATES, isLatexTemplate } from '@/lib/latexTemplates';
 import {
@@ -95,6 +97,8 @@ const TEMPLATES = {
   professional: ProfessionalTemplate,
   compact: CompactTemplate,
   sidebar: SidebarTemplate,
+  classic: ClassicTemplate,
+  engineering: EngineeringTemplate,
 } as const;
 
 type TemplateKey = keyof typeof TEMPLATES;
@@ -105,6 +109,8 @@ const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   professional: 'Professional',
   compact: 'Compact',
   sidebar: 'Sidebar',
+  classic: 'Classic',
+  engineering: 'Engineering',
 };
 
 // One-click accent presets for the Design popover.
